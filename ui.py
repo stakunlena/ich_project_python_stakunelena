@@ -1,4 +1,5 @@
-from mysql_connector import search_by_keyword
+from mongodb_connector import *
+from mysql_connector import *
 
 def run_menu():
     while True:
@@ -29,8 +30,47 @@ def run_menu():
         else:
             print("Неверный ввод. Повторите.\n")
 
-
 def handle_keyword_search():
+    print("\n== ПОИСК ПО КЛЮЧЕВОМУ СЛОВУ ==")
+    keyword = input("Введите часть названия фильма (или 0 для возврата): ")
+    if keyword == "0":
+        return
+
+    print(f"Выполняется поиск по ключевому слову: {keyword}...\n")
+    results = search_by_keyword(keyword)
+
+    # Логирование в MongoDB
+    log_search_to_mongo(
+        search_type="keyword",
+        params={"keyword": keyword},
+        results_count=len(results)
+    )
+
+    if not results:
+        print("Ничего не найдено.\n")
+        return
+
+    index = 0
+    page_size = 10
+    total = len(results)
+
+    while index < total:
+        page = results[index:index + page_size]
+        for film in page:
+            print(f"{film['film_id']}. {film['title']} ({film['release_year']})")
+            print(f"Описание: {film['description']}\n")
+
+        index += page_size
+
+        if index < total:
+            more = input("Показать следующие 10 результатов? (y/n): ").lower()
+            if more != 'y':
+                break
+        else:
+            print("Это были все результаты.\n")
+
+
+"""def handle_keyword_search():
     print("\n== ПОИСК ПО КЛЮЧЕВОМУ СЛОВУ ==")
     keyword = input("Введите текстовый запрос или название фильма или 0 для возврата в главное меню: ")
     if keyword == "0":
@@ -58,7 +98,7 @@ def handle_keyword_search():
             if more != 'y':
                 break
         else:
-            print("Это были все результаты.")
+            print("Это были все результаты.")"""
 
 
 def handle_genre_search():
@@ -79,5 +119,39 @@ def show_popular_queries():
 
 def show_recent_queries():
     print("\n== ПОСЛЕДНИЕ ЗАПРОСЫ ==")
-    # Здесь будет вызов функции статистики
-    print("(заглушка) список последних запросов\n")
+
+    client, collection = connect_to_mongo()
+
+    try:
+        cursor = collection.find().sort("timestamp", -1)
+        results = list(cursor)
+        if not results:
+            print("Нет сохранённых запросов.\n")
+            return
+
+        index = 0
+        page_size = 10
+        total = len(results)
+
+        while index < total:
+            page = results[index:index + page_size]
+            for doc in page:
+                timestamp = doc.get("timestamp", "N/A")
+                search_type = doc.get("search_type", "N/A")
+                params = doc.get("params", {})
+                results_count = doc.get("results_count", "N/A")
+
+                print(f"[{timestamp}] {search_type.upper()} — {params} (результатов: {results_count})")
+
+            index += page_size
+
+            if index < total:
+                cont = input("\nПоказать ещё 10 запросов? (y/n): ").strip().lower()
+                if cont != "y":
+                    break
+            else:
+                print("\nЭто были все запросы.\n")
+
+    finally:
+        client.close()
+
